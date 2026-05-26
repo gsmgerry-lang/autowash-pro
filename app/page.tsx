@@ -8,10 +8,11 @@ const supabase = createClient(
 );
 
 const VALOR_PONTO = 4.50;
+const AGENDA_URL = 'https://www.bemarca.pt/marcacoes/app/#/marcacoes/ecocarwashalcochete';
 
 export default function Home() {
   const [sessao, setSessao] = useState<any>(null);
-  const [vista, setVista] = useState<'dashboard'|'entrada'>('dashboard');
+  const [vista, setVista] = useState<'dashboard'|'entrada'|'agenda'>('dashboard');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginErro, setLoginErro] = useState('');
@@ -48,43 +49,31 @@ export default function Home() {
     const hoje = new Date().toISOString().split('T')[0];
     const { data: ordens } = await supabase
       .from('ordens_servico')
-      .select('valor_total, comissao_individual_paga, funcionarios_alocados, pontos_individuais_ganhos')
+      .select('valor_total, comissao_individual_paga, funcionarios_alocados')
       .gte('data_registro', `${hoje}T00:00:00`)
       .lte('data_registro', `${hoje}T23:59:59`);
-
     const { data: rank } = await supabase
       .from('funcionarios')
       .select('*')
       .order('pontos_total', { ascending: false });
-
     const total = ordens?.length || 0;
     const faturamento = ordens?.reduce((s, o) => s + Number(o.valor_total), 0) || 0;
     const comissao = ordens?.reduce((s, o) => {
       const n = (o.funcionarios_alocados as number[])?.length || 1;
       return s + Number(o.comissao_individual_paga) * n;
     }, 0) || 0;
-
-    setDashboard({
-      total,
-      faturamento: faturamento.toFixed(2),
-      ticketMedio: total > 0 ? (faturamento / total).toFixed(2) : '0.00',
-      comissao: comissao.toFixed(2),
-    });
+    setDashboard({ total, faturamento: faturamento.toFixed(2), ticketMedio: total > 0 ? (faturamento/total).toFixed(2) : '0.00', comissao: comissao.toFixed(2) });
     setRanking(rank || []);
   }
 
   async function fazerLogin() {
-    setLoginLoading(true);
-    setLoginErro('');
+    setLoginLoading(true); setLoginErro('');
     const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password: loginPassword });
     if (error) setLoginErro('Email ou password incorrectos');
     setLoginLoading(false);
   }
 
-  async function fazerLogout() {
-    await supabase.auth.signOut();
-    setSessao(null);
-  }
+  async function fazerLogout() { await supabase.auth.signOut(); setSessao(null); }
 
   async function carregarDados() {
     const { data: f } = await supabase.from('funcionarios').select('*').eq('status','ativo').order('id_interno');
@@ -181,8 +170,6 @@ export default function Home() {
       {vista === 'dashboard' && (
         <div style={{ padding: '0 16px' }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Dashboard · Hoje</div>
-
-          {/* MÉTRICAS */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: 14 }}>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>CARROS HOJE</div>
@@ -201,16 +188,12 @@ export default function Home() {
               <div style={{ fontSize: 24, fontWeight: 700, color: '#7c3aed' }}>{dashboard?.comissao || '0.00'}€</div>
             </div>
           </div>
-
-          {/* RANKING */}
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>🏆 Ranking da Equipa</div>
           <div style={{ ...card, padding: 12 }}>
             {ranking.map((f, i) => (
               <div key={f.id_interno} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < ranking.length-1 ? '1px solid #f3f4f6' : 'none' }}>
                 <div style={{ width: 24, textAlign: 'center', fontSize: 14 }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`}</div>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>
-                  {f.nome.charAt(0)}
-                </div>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{f.nome.charAt(0)}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{f.nome}</div>
                   <div style={{ fontSize: 11, color: '#888' }}>{f.carros_total} carros</div>
@@ -222,10 +205,21 @@ export default function Home() {
               </div>
             ))}
           </div>
+          <button onClick={() => { setVista('entrada'); setEcrã('pesquisa'); }} style={btn('#C4922A')}>🚗 Nova Entrada</button>
+        </div>
+      )}
 
-          <button onClick={() => { setVista('entrada'); setEcrã('pesquisa'); }} style={btn('#C4922A')}>
-            🚗 Nova Entrada
-          </button>
+      {/* AGENDA */}
+      {vista === 'agenda' && (
+        <div style={{ padding: '0 16px' }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>📅 Agenda — EcoCarWash</div>
+          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', background: '#f9fafb' }}>
+            <iframe
+              src={AGENDA_URL}
+              style={{ width: '100%', height: 'calc(100vh - 180px)', border: 'none', display: 'block' }}
+              title="Agenda EcoCarWash"
+            />
+          </div>
         </div>
       )}
 
@@ -258,9 +252,7 @@ export default function Home() {
           {ecrã === 'cliente' && veiculo && (
             <div style={{ ...card, background: '#f0fdf4', borderColor: '#86efac' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>
-                  {veiculo.nome_cliente?.charAt(0) || '?'}
-                </div>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>{veiculo.nome_cliente?.charAt(0) || '?'}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{veiculo.nome_cliente}</div>
                   <div style={{ color: '#666', fontSize: 13 }}>{veiculo.telefone_cliente}</div>
@@ -372,6 +364,9 @@ export default function Home() {
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', padding: '8px 0' }}>
         <button onClick={() => setVista('dashboard')} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'dashboard' ? '#C4922A' : '#888', fontWeight: vista === 'dashboard' ? 700 : 400 }}>
           📊<br/>Dashboard
+        </button>
+        <button onClick={() => { setVista('agenda'); }} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'agenda' ? '#C4922A' : '#888', fontWeight: vista === 'agenda' ? 700 : 400 }}>
+          📅<br/>Agenda
         </button>
         <button onClick={() => { setVista('entrada'); setEcrã('pesquisa'); }} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'entrada' ? '#C4922A' : '#888', fontWeight: vista === 'entrada' ? 700 : 400 }}>
           🚗<br/>Nova Entrada
