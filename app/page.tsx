@@ -8,7 +8,7 @@ const supabase = createClient(
 );
 
 const VALOR_PONTO = 4.50;
-const AGENDA_URL = 'https://www.bemarca.pt/marcacoes/app/#/marcacoes/ecocarwashalcochete';
+const AGENDA_URL = 'https://agenda.ecocarwash.pt/#/home';
 
 export default function Home() {
   const [sessao, setSessao] = useState<any>(null);
@@ -157,7 +157,6 @@ export default function Home() {
 
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: '0 0 80px' }}>
-      {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '16px 16px 8px', borderBottom: '1px solid #e5e7eb', marginBottom: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>💧 AutoWash Pro</div>
@@ -166,7 +165,6 @@ export default function Home() {
         <button onClick={fazerLogout} style={{ border: '1px solid #e5e7eb', background: 'transparent', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', color: '#888' }}>Sair</button>
       </div>
 
-      {/* DASHBOARD */}
       {vista === 'dashboard' && (
         <div style={{ padding: '0 16px' }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Dashboard · Hoje</div>
@@ -209,21 +207,21 @@ export default function Home() {
         </div>
       )}
 
-      {/* AGENDA */}
       {vista === 'agenda' && (
-        <div style={{ padding: '0 16px' }}>
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>📅 Agenda — EcoCarWash</div>
-          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', background: '#f9fafb' }}>
-            <iframe
-              src={AGENDA_URL}
-              style={{ width: '100%', height: 'calc(100vh - 180px)', border: 'none', display: 'block' }}
-              title="Agenda EcoCarWash"
-            />
+        <div style={{ padding: '0 16px', textAlign: 'center' }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>📅 Agenda EcoCarWash</div>
+          <div style={{ ...card, padding: 24 }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Agenda Interna</div>
+            <div style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>Clica para abrir a agenda em nova janela</div>
+            <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'block', width: '100%', padding: '14px 0', background: '#C4922A', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 600, textDecoration: 'none', boxSizing: 'border-box' as const }}>
+              🗓️ Abrir Agenda
+            </a>
           </div>
         </div>
       )}
 
-      {/* NOVA ENTRADA */}
       {vista === 'entrada' && (
         <div style={{ padding: '0 16px' }}>
           <button onClick={() => setVista('dashboard')} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>← Dashboard</button>
@@ -360,12 +358,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* BARRA INFERIOR */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', padding: '8px 0' }}>
         <button onClick={() => setVista('dashboard')} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'dashboard' ? '#C4922A' : '#888', fontWeight: vista === 'dashboard' ? 700 : 400 }}>
           📊<br/>Dashboard
         </button>
-        <button onClick={() => { setVista('agenda'); }} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'agenda' ? '#C4922A' : '#888', fontWeight: vista === 'agenda' ? 700 : 400 }}>
+        <button onClick={() => setVista('agenda')} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'agenda' ? '#C4922A' : '#888', fontWeight: vista === 'agenda' ? 700 : 400 }}>
           📅<br/>Agenda
         </button>
         <button onClick={() => { setVista('entrada'); setEcrã('pesquisa'); }} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'entrada' ? '#C4922A' : '#888', fontWeight: vista === 'entrada' ? 700 : 400 }}>
