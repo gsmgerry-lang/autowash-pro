@@ -9,6 +9,23 @@ const supabase = createClient(
 
 const VALOR_PONTO = 4.50;
 const AGENDA_URL = 'https://agenda.ecocarwash.pt/#/home';
+const DESCONTO_DIAS = 30;
+const DESCONTO_PERCENT = 10;
+
+function calcularCupao(ordens: any[]) {
+  if (!ordens || ordens.length === 0) return null;
+  const ultima = ordens[0];
+  const dataUltima = new Date(ultima.data_registro);
+  const hoje = new Date();
+  const diffDias = Math.floor((hoje.getTime() - dataUltima.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDias > DESCONTO_DIAS) return null;
+  const diasRestantes = DESCONTO_DIAS - diffDias;
+  const desconto = (Number(ultima.valor_total) * DESCONTO_PERCENT / 100).toFixed(2);
+  const dataExpira = new Date(dataUltima);
+  dataExpira.setDate(dataExpira.getDate() + DESCONTO_DIAS);
+  const dataFormatada = dataExpira.toLocaleDateString('pt-PT');
+  return { desconto, diasRestantes, dataExpira: dataFormatada, valorUltima: ultima.valor_total };
+}
 
 export default function Home() {
   const [sessao, setSessao] = useState<any>(null);
@@ -47,7 +64,7 @@ export default function Home() {
 
   async function carregarDashboard() {
     const hoje = new Date().toISOString().split('T')[0];
-    const { data: ordens } = await supabase
+    const { data: ordensHoje } = await supabase
       .from('ordens_servico')
       .select('valor_total, comissao_individual_paga, funcionarios_alocados')
       .gte('data_registro', `${hoje}T00:00:00`)
@@ -56,9 +73,9 @@ export default function Home() {
       .from('funcionarios')
       .select('*')
       .order('pontos_total', { ascending: false });
-    const total = ordens?.length || 0;
-    const faturamento = ordens?.reduce((s, o) => s + Number(o.valor_total), 0) || 0;
-    const comissao = ordens?.reduce((s, o) => {
+    const total = ordensHoje?.length || 0;
+    const faturamento = ordensHoje?.reduce((s, o) => s + Number(o.valor_total), 0) || 0;
+    const comissao = ordensHoje?.reduce((s, o) => {
       const n = (o.funcionarios_alocados as number[])?.length || 1;
       return s + Number(o.comissao_individual_paga) * n;
     }, 0) || 0;
@@ -88,7 +105,12 @@ export default function Home() {
     const { data, error } = await supabase.from('veiculos').select('*').eq('matricula', matricula.toUpperCase()).single();
     if (error || !data) { setVeiculo({ matricula: matricula.toUpperCase() }); setEcrã('novo'); }
     else {
-      const { data: ord } = await supabase.from('ordens_servico').select('*, servicos(nome)').eq('veiculo_id', data.id).order('data_registro', { ascending: false }).limit(5);
+      const { data: ord } = await supabase
+        .from('ordens_servico')
+        .select('*, servicos(nome)')
+        .eq('veiculo_id', data.id)
+        .order('data_registro', { ascending: false })
+        .limit(5);
       setVeiculo(data); setOrdens(ord || []); setEcrã('cliente');
     }
     setLoading(false);
@@ -247,41 +269,63 @@ export default function Home() {
             </div>
           )}
 
-          {ecrã === 'cliente' && veiculo && (
-            <div style={{ ...card, background: '#f0fdf4', borderColor: '#86efac' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>{veiculo.nome_cliente?.charAt(0) || '?'}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{veiculo.nome_cliente}</div>
-                  <div style={{ color: '#666', fontSize: 13 }}>{veiculo.telefone_cliente}</div>
+          {ecrã === 'cliente' && veiculo && (() => {
+            const cupao = calcularCupao(ordens);
+            return (
+              <div style={{ ...card, background: '#f0fdf4', borderColor: '#86efac' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700 }}>{veiculo.nome_cliente?.charAt(0) || '?'}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 16 }}>{veiculo.nome_cliente}</div>
+                    <div style={{ color: '#666', fontSize: 13 }}>{veiculo.telefone_cliente}</div>
+                  </div>
+                  <div style={{ background: '#C4922A', color: '#fff', fontSize: 11, padding: '2px 10px', borderRadius: 20, fontWeight: 600 }}>{ordens.length} visitas</div>
                 </div>
-                <div style={{ background: '#C4922A', color: '#fff', fontSize: 11, padding: '2px 10px', borderRadius: 20, fontWeight: 600 }}>{ordens.length} visitas</div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                <div style={{ background: '#fff', borderRadius: 8, padding: '8px 12px' }}>
-                  <div style={{ fontSize: 11, color: '#888' }}>Matrícula</div>
-                  <div style={{ fontWeight: 700, letterSpacing: 2 }}>{veiculo.matricula}</div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                  <div style={{ background: '#fff', borderRadius: 8, padding: '8px 12px' }}>
+                    <div style={{ fontSize: 11, color: '#888' }}>Matrícula</div>
+                    <div style={{ fontWeight: 700, letterSpacing: 2 }}>{veiculo.matricula}</div>
+                  </div>
+                  <div style={{ background: '#fff', borderRadius: 8, padding: '8px 12px' }}>
+                    <div style={{ fontSize: 11, color: '#888' }}>Viatura</div>
+                    <div style={{ fontWeight: 600 }}>{veiculo.marca_modelo || '—'}</div>
+                  </div>
                 </div>
-                <div style={{ background: '#fff', borderRadius: 8, padding: '8px 12px' }}>
-                  <div style={{ fontSize: 11, color: '#888' }}>Viatura</div>
-                  <div style={{ fontWeight: 600 }}>{veiculo.marca_modelo || '—'}</div>
-                </div>
-              </div>
-              {ordens.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>ÚLTIMAS LAVAGENS</div>
-                  {ordens.slice(0,3).map((o,i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e5e7eb' }}>
-                      <span>{o.servicos?.nome || 'Serviço'}</span>
-                      <span style={{ fontWeight: 600 }}>{o.valor_total}€</span>
+
+                {/* CUPÃO DE FIDELIZAÇÃO */}
+                {cupao && (
+                  <div style={{ background: '#fefce8', border: '1.5px dashed #facc15', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 20 }}>🎟️</span>
+                      <span style={{ fontWeight: 700, color: '#854d0e', fontSize: 14 }}>Cupão de Fidelização Activo!</span>
                     </div>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setEcrã('servico')} style={btn('#16a34a')}>Nova Lavagem →</button>
-              <button onClick={() => setEcrã('pesquisa')} style={{ ...btn('#888'), marginTop: 6 }}>← Nova Pesquisa</button>
-            </div>
-          )}
+                    <div style={{ fontSize: 13, color: '#713f12', marginBottom: 4 }}>
+                      Desconto de <strong style={{ fontSize: 16, color: '#16a34a' }}>{cupao.desconto}€</strong> na próxima lavagem
+                    </div>
+                    <div style={{ fontSize: 11, color: '#92400e' }}>
+                      ⏰ Válido até <strong>{cupao.dataExpira}</strong> · {cupao.diasRestantes} dias restantes
+                    </div>
+                  </div>
+                )}
+
+                {ordens.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>ÚLTIMAS LAVAGENS</div>
+                    {ordens.slice(0,3).map((o,i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', borderBottom: '1px solid #e5e7eb' }}>
+                        <span>{o.servicos?.nome || 'Serviço'}</span>
+                        <span style={{ fontWeight: 600 }}>{o.valor_total}€</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button onClick={() => setEcrã('servico')} style={btn('#16a34a')}>Nova Lavagem →</button>
+                <button onClick={() => setEcrã('pesquisa')} style={{ ...btn('#888'), marginTop: 6 }}>← Nova Pesquisa</button>
+              </div>
+            );
+          })()}
 
           {ecrã === 'servico' && (
             <div>
