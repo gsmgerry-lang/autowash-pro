@@ -23,7 +23,7 @@ function calcularCupao(ordens: any[]) {
   const desconto = (Number(ultima.valor_total) * DESCONTO_PERCENT / 100).toFixed(2);
   const dataExpira = new Date(dataUltima);
   dataExpira.setDate(dataExpira.getDate() + DESCONTO_DIAS);
-  return { desconto, diasRestantes, dataExpira: dataExpira.toLocaleDateString('pt-PT'), valorUltima: ultima.valor_total };
+  return { desconto, diasRestantes, dataExpira: dataExpira.toLocaleDateString('pt-PT') };
 }
 
 export default function Home() {
@@ -49,7 +49,6 @@ export default function Home() {
   const [sucesso, setSucesso] = useState<any>(null);
   const [dashboard, setDashboard] = useState<any>(null);
   const [ranking, setRanking] = useState<any[]>([]);
-  const [iframeErro, setIframeErro] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -131,23 +130,19 @@ export default function Home() {
     const nLavadores = lavadoresSel.length || 1;
     const comissaoIndividual = comissaoTotal / nLavadores;
     const pontosIndividuais = servicoSel ? servicoSel.pontos / nLavadores : 0;
-
     const { error } = await supabase.from('ordens_servico').insert({
-      veiculo_id: veiculo.id,
-      servico_id: servicoSel?.id || null,
+      veiculo_id: veiculo.id, servico_id: servicoSel?.id || null,
       funcionarios_alocados: lavadoresSel.length > 0 ? lavadoresSel : [],
       valor_total: servicoSel?.preco || 0,
       comissao_individual_paga: lavadoresSel.length > 0 ? comissaoIndividual : 0,
       pontos_individuais_ganhos: lavadoresSel.length > 0 ? pontosIndividuais : 0,
     });
     if (error) return alert('Erro ao registar!');
-
     if (lavadoresSel.length > 0) {
       for (const id of lavadoresSel) {
         await supabase.rpc('incrementar_stats_funcionario', { p_id_interno: id, p_pontos: pontosIndividuais, p_comissao: comissaoIndividual });
       }
     }
-
     setSucesso({
       servico: servicoSel?.nome || '—', valor: servicoSel?.preco || 0,
       pontos: servicoSel?.pontos || 0, comissaoTotal, comissaoIndividual,
@@ -163,7 +158,7 @@ export default function Home() {
     setEcrã('pesquisa'); setMatricula(''); setVeiculo(null); setOrdens([]);
     setServicoSel(null); setLavadoresSel([]); setSemLavador(false);
     setNovoNome(''); setNovoTel(''); setNovoModelo(''); setSucesso(null);
-    setVista('dashboard'); setIframeErro(false);
+    setVista('dashboard');
   }
 
   const btn = (bg: string) => ({ width: '100%', padding: '12px 0', background: bg, color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 10 });
@@ -200,7 +195,6 @@ export default function Home() {
         <button onClick={fazerLogout} style={{ border: '1px solid #e5e7eb', background: 'transparent', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', color: '#888' }}>Sair</button>
       </div>
 
-      {/* DASHBOARD */}
       {vista === 'dashboard' && (
         <div style={{ padding: '0 16px' }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Dashboard · Hoje</div>
@@ -243,34 +237,21 @@ export default function Home() {
         </div>
       )}
 
-      {/* AGENDA */}
       {vista === 'agenda' && (
-        <div style={{ padding: '0 16px' }}>
+        <div style={{ padding: '0 16px', textAlign: 'center' }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>📅 Agenda EcoCarWash</div>
-          {!iframeErro ? (
-            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-              <iframe
-                src={AGENDA_URL}
-                style={{ width: '100%', height: 'calc(100vh - 160px)', border: 'none', display: 'block' }}
-                title="Agenda EcoCarWash"
-                onError={() => setIframeErro(true)}
-              />
-            </div>
-          ) : (
-            <div style={{ ...card, padding: 24, textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>Agenda Interna</div>
-              <div style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>Clica para abrir em nova janela</div>
-              <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'block', width: '100%', padding: '14px 0', background: '#C4922A', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 600, textDecoration: 'none', boxSizing: 'border-box' as const }}>
-                🗓️ Abrir Agenda
-              </a>
-            </div>
-          )}
+          <div style={{ ...card, padding: 24 }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Agenda Interna</div>
+            <div style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>Clica para abrir em nova janela</div>
+            <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'block', width: '100%', padding: '14px 0', background: '#C4922A', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 600, textDecoration: 'none', boxSizing: 'border-box' as const }}>
+              🗓️ Abrir Agenda
+            </a>
+          </div>
         </div>
       )}
 
-      {/* NOVA ENTRADA */}
       {vista === 'entrada' && (
         <div style={{ padding: '0 16px' }}>
           <button onClick={() => setVista('dashboard')} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>← Dashboard</button>
@@ -343,35 +324,26 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-                <button onClick={() => { setIframeErro(false); setEcrã('agenda_check'); }} style={btn('#2563eb')}>📅 Ver Disponibilidade na Agenda →</button>
-                <button onClick={() => setEcrã('servico')} style={{ ...btn('#16a34a'), marginTop: 6 }}>⚡ Lavar Agora (sem agenda) →</button>
+                <button onClick={() => setEcrã('agenda_check')} style={btn('#2563eb')}>📅 Ver Disponibilidade na Agenda →</button>
                 <button onClick={() => setEcrã('pesquisa')} style={{ ...btn('#888'), marginTop: 6 }}>← Nova Pesquisa</button>
               </div>
             );
           })()}
 
-          {/* AGENDA EMBUTIDA NO FLUXO */}
           {ecrã === 'agenda_check' && (
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>📅 Verificar disponibilidade</div>
-              {!iframeErro ? (
-                <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', marginBottom: 12 }}>
-                  <iframe
-                    src={AGENDA_URL}
-                    style={{ width: '100%', height: '400px', border: 'none', display: 'block' }}
-                    title="Agenda EcoCarWash"
-                    onError={() => setIframeErro(true)}
-                  />
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📅 Verificar disponibilidade</div>
+              <div style={{ ...card, padding: 20, textAlign: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>📅</div>
+                <div style={{ fontSize: 13, color: '#666', marginBottom: 16, lineHeight: 1.5 }}>
+                  Abre a agenda para verificar disponibilidade.<br/>
+                  Depois volta aqui e continua.
                 </div>
-              ) : (
-                <div style={{ ...card, padding: 16, textAlign: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>A agenda não pode ser exibida aqui.<br/>Abre numa nova janela para verificar.</div>
-                  <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'inline-block', padding: '10px 20px', background: '#2563eb', color: '#fff', borderRadius: 10, fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
-                    📅 Abrir Agenda
-                  </a>
-                </div>
-              )}
+                <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'block', width: '100%', padding: '12px 0', background: '#2563eb', color: '#fff', borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: 'none', boxSizing: 'border-box' as const, marginBottom: 0 }}>
+                  🗓️ Abrir Agenda numa nova janela
+                </a>
+              </div>
               <button onClick={() => setEcrã('servico')} style={btn('#C4922A')}>✅ Horário confirmado → Escolher Serviço</button>
               <button onClick={() => setEcrã('cliente')} style={{ ...btn('#888'), marginTop: 6 }}>← Voltar</button>
             </div>
@@ -412,14 +384,11 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-
-              {/* OPÇÃO SEM LAVADOR */}
               <div onClick={() => { setSemLavador(!semLavador); setLavadoresSel([]); }}
                 style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${semLavador ? '#2563eb' : '#e5e7eb'}`, background: semLavador ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 16 }}>⏳</span>
                 <span style={{ fontWeight: semLavador ? 700 : 400, color: semLavador ? '#2563eb' : '#666' }}>A definir depois (agendamento futuro)</span>
               </div>
-
               {lavadoresSel.length > 0 && servicoSel && (
                 <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: 12, marginBottom: 12 }}>
                   <div style={{ fontSize: 13, marginBottom: 6 }}>💰 Divisão:</div>
@@ -430,10 +399,7 @@ export default function Home() {
                   </div>
                 </div>
               )}
-
-              <button
-                onClick={confirmarLavagem}
-                disabled={lavadoresSel.length === 0 && !semLavador}
+              <button onClick={confirmarLavagem} disabled={lavadoresSel.length === 0 && !semLavador}
                 style={btn(lavadoresSel.length > 0 || semLavador ? '#16a34a' : '#ccc')}>
                 ✅ Confirmar {semLavador ? 'Agendamento' : 'Lavagem'}
               </button>
@@ -449,11 +415,13 @@ export default function Home() {
               <div style={{ ...card, textAlign: 'left' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Serviço</span><span style={{ fontWeight: 600 }}>{sucesso.servico}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Valor</span><span style={{ fontWeight: 600 }}>{sucesso.valor}€</span></div>
-                {!sucesso.semLavador && <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Pontos</span><span style={{ fontWeight: 600, color: '#C4922A' }}>{sucesso.pontos} pts</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Comissão total</span><span style={{ fontWeight: 600, color: '#C4922A' }}>{sucesso.comissaoTotal.toFixed(2)}€</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}><span style={{ fontWeight: 600 }}>Por lavador ({sucesso.nLavadores}x)</span><span style={{ fontWeight: 700, color: '#16a34a', fontSize: 18 }}>{sucesso.comissaoIndividual.toFixed(2)}€</span></div>
-                </>}
+                {!sucesso.semLavador && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Pontos</span><span style={{ fontWeight: 600, color: '#C4922A' }}>{sucesso.pontos} pts</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Comissão total</span><span style={{ fontWeight: 600, color: '#C4922A' }}>{sucesso.comissaoTotal.toFixed(2)}€</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}><span style={{ fontWeight: 600 }}>Por lavador ({sucesso.nLavadores}x)</span><span style={{ fontWeight: 700, color: '#16a34a', fontSize: 18 }}>{sucesso.comissaoIndividual.toFixed(2)}€</span></div>
+                  </>
+                )}
                 {sucesso.semLavador && (
                   <div style={{ padding: '10px 0 0', fontSize: 13, color: '#2563eb' }}>⏳ Lavador a definir posteriormente</div>
                 )}
@@ -477,7 +445,7 @@ export default function Home() {
         <button onClick={() => setVista('dashboard')} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'dashboard' ? '#C4922A' : '#888', fontWeight: vista === 'dashboard' ? 700 : 400 }}>
           📊<br/>Dashboard
         </button>
-        <button onClick={() => { setVista('agenda'); setIframeErro(false); }} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'agenda' ? '#C4922A' : '#888', fontWeight: vista === 'agenda' ? 700 : 400 }}>
+        <button onClick={() => setVista('agenda')} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'agenda' ? '#C4922A' : '#888', fontWeight: vista === 'agenda' ? 700 : 400 }}>
           📅<br/>Agenda
         </button>
         <button onClick={() => { setVista('entrada'); setEcrã('pesquisa'); }} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'entrada' ? '#C4922A' : '#888', fontWeight: vista === 'entrada' ? 700 : 400 }}>
