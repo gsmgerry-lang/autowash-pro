@@ -8,9 +8,22 @@ const supabase = createClient(
 );
 
 const VALOR_PONTO = 4.50;
-const AGENDA_URL = 'https://agenda.ecocarwash.pt/#/dashboard';
+const AGENDA_LOJA_ID = '972';
+const AGENDA_BASE = 'https://agenda.ecocarwash.pt';
 const DESCONTO_DIAS = 30;
 const DESCONTO_PERCENT = 10;
+
+const HORAS_DISPONIVEIS = [
+  '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+  '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
+  '16:00','16:30','17:00','17:30','18:00'
+];
+
+const ESTADOS = ['Agendado','A Lavar','Lavado','Concluído','Cancelado'];
+const ESTADO_CORES: Record<string, string> = {
+  'Agendado': '#2563eb', 'A Lavar': '#d97706', 'Lavado': '#7c3aed',
+  'Concluído': '#16a34a', 'Cancelado': '#dc2626'
+};
 
 function calcularCupao(ordens: any[]) {
   if (!ordens || ordens.length === 0) return null;
@@ -26,6 +39,22 @@ function calcularCupao(ordens: any[]) {
   return { desconto, diasRestantes, dataExpira: dataExpira.toLocaleDateString('pt-PT') };
 }
 
+function gerarCalendario(mesBase: Date) {
+  const ano = mesBase.getFullYear();
+  const mes = mesBase.getMonth();
+  const primeiroDia = new Date(ano, mes, 1).getDay();
+  const diasNoMes = new Date(ano, mes + 1, 0).getDate();
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+  const dias = [];
+  for (let i = 0; i < (primeiroDia === 0 ? 6 : primeiroDia - 1); i++) dias.push(null);
+  for (let d = 1; d <= diasNoMes; d++) {
+    const data = new Date(ano, mes, d);
+    dias.push({ dia: d, data, passado: data < hoje, hoje: data.getTime() === hoje.getTime() });
+  }
+  return dias;
+}
+
 export default function Home() {
   const [sessao, setSessao] = useState<any>(null);
   const [vista, setVista] = useState<'dashboard'|'entrada'|'agenda'>('dashboard');
@@ -33,7 +62,7 @@ export default function Home() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginErro, setLoginErro] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-  const [ecrã, setEcrã] = useState<'pesquisa'|'novo'|'cliente'|'agenda_check'|'servico'|'lavadores'|'confirmacao'>('pesquisa');
+  const [ecrã, setEcrã] = useState<'pesquisa'|'novo'|'cliente'|'calendario'|'hora'|'servico'|'detalhes'|'confirmacao'>('pesquisa');
   const [matricula, setMatricula] = useState('');
   const [loading, setLoading] = useState(false);
   const [veiculo, setVeiculo] = useState<any>(null);
@@ -42,7 +71,12 @@ export default function Home() {
   const [servicos, setServicos] = useState<any[]>([]);
   const [servicoSel, setServicoSel] = useState<any>(null);
   const [lavadoresSel, setLavadoresSel] = useState<number[]>([]);
-  const [semLavador, setSemLavador] = useState(false);
+  const [vendedorSel, setVendedorSel] = useState<number|null>(null);
+  const [estado, setEstado] = useState('Agendado');
+  const [notas, setNotas] = useState('');
+  const [dataSel, setDataSel] = useState<Date|null>(null);
+  const [horaSel, setHoraSel] = useState('');
+  const [mesBase, setMesBase] = useState(new Date());
   const [novoNome, setNovoNome] = useState('');
   const [novoTel, setNovoTel] = useState('');
   const [novoModelo, setNovoModelo] = useState('');
@@ -114,26 +148,52 @@ export default function Home() {
   async function guardarNovoCliente() {
     if (!novoNome.trim()) return alert('Escreve o nome!');
     const { data, error } = await supabase.from('veiculos').insert({
-      matricula: matricula.toUpperCase(), nome_cliente: novoNome, telefone_cliente: novoTel, marca_modelo: novoModelo
+      matricula: matricula.toUpperCase(), nome_cliente: novoNome,
+      telefone_cliente: novoTel, marca_modelo: novoModelo
     }).select().single();
     if (error) return alert('Erro ao guardar!');
     setVeiculo(data); setOrdens([]); setEcrã('cliente');
   }
 
-  function toggleLavador(id: number) {
-    setSemLavador(false);
-    setLavadoresSel(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  function abrirAgendaHoje() {
+    const hoje = new Date();
+    const dataStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`;
+    window.open(`${AGENDA_BASE}/#/appointments?date=${dataStr}`, '_blank');
+  }
+
+  function abrirAgendaComDados() {
+    if (!servicoSel || !dataSel || !horaSel) return;
+    const dataStr = `${dataSel.getFullYear()}-${String(dataSel.getMonth()+1).padStart(2,'0')}-${String(dataSel.getDate()).padStart(2,'0')}`;
+    const vendedor = funcionarios.find(f => f.id_interno === vendedorSel);
+    const lavadores = funcionarios.filter(f => lavadoresSel.includes(f.id_interno));
+    const notasFull = [
+      notas,
+      vendedor ? `Vendedor: ${vendedor.nome}` : '',
+      lavadores.length > 0 ? `Lavadores: ${lavadores.map(f=>f.nome).join(', ')}` : 'Lavadores: A definir',
+      `Estado: ${estado}`
+    ].filter(Boolean).join(' | ');
+
+    const url = `${AGENDA_BASE}/#/appointments/new/${AGENDA_LOJA_ID}?` +
+      `client_name=${encodeURIComponent(veiculo.nome_cliente || '')}` +
+      `&client_phone=${encodeURIComponent(veiculo.telefone_cliente || '')}` +
+      `&vehicle=${encodeURIComponent(veiculo.matricula || '')}` +
+      `&service=${encodeURIComponent(servicoSel.nome || '')}` +
+      `&date=${dataStr}` +
+      `&time=${encodeURIComponent(horaSel)}` +
+      `&notes=${encodeURIComponent(notasFull)}`;
+    window.open(url, '_blank');
   }
 
   async function confirmarLavagem() {
-    const comissaoTotal = servicoSel ? servicoSel.pontos * VALOR_PONTO : 0;
+    if (!servicoSel || !dataSel || !horaSel) return alert('Preenche todos os campos!');
+    const comissaoTotal = servicoSel.pontos * VALOR_PONTO;
     const nLavadores = lavadoresSel.length || 1;
     const comissaoIndividual = comissaoTotal / nLavadores;
-    const pontosIndividuais = servicoSel ? servicoSel.pontos / nLavadores : 0;
+    const pontosIndividuais = servicoSel.pontos / nLavadores;
     const { error } = await supabase.from('ordens_servico').insert({
-      veiculo_id: veiculo.id, servico_id: servicoSel?.id || null,
+      veiculo_id: veiculo.id, servico_id: servicoSel.id,
       funcionarios_alocados: lavadoresSel.length > 0 ? lavadoresSel : [],
-      valor_total: servicoSel?.preco || 0,
+      valor_total: servicoSel.preco,
       comissao_individual_paga: lavadoresSel.length > 0 ? comissaoIndividual : 0,
       pontos_individuais_ganhos: lavadoresSel.length > 0 ? pontosIndividuais : 0,
     });
@@ -143,25 +203,29 @@ export default function Home() {
         await supabase.rpc('incrementar_stats_funcionario', { p_id_interno: id, p_pontos: pontosIndividuais, p_comissao: comissaoIndividual });
       }
     }
+    const vendedor = funcionarios.find(f => f.id_interno === vendedorSel);
+    const lavadores = funcionarios.filter(f => lavadoresSel.includes(f.id_interno));
     setSucesso({
-      servico: servicoSel?.nome || '—', valor: servicoSel?.preco || 0,
-      pontos: servicoSel?.pontos || 0, comissaoTotal, comissaoIndividual,
-      nLavadores: lavadoresSel.length,
-      lavadores: funcionarios.filter(f => lavadoresSel.includes(f.id_interno)),
-      semLavador
+      servico: servicoSel.nome, valor: servicoSel.preco, pontos: servicoSel.pontos,
+      comissaoTotal, comissaoIndividual, nLavadores: lavadoresSel.length,
+      lavadores, vendedor, estado, notas, dataSel, horaSel,
+      semLavador: lavadoresSel.length === 0
     });
     setEcrã('confirmacao');
     carregarDashboard();
+    // Abrir agenda com dados preenchidos
+    abrirAgendaComDados();
   }
 
   function resetar() {
     setEcrã('pesquisa'); setMatricula(''); setVeiculo(null); setOrdens([]);
-    setServicoSel(null); setLavadoresSel([]); setSemLavador(false);
+    setServicoSel(null); setLavadoresSel([]); setVendedorSel(null);
+    setEstado('Agendado'); setNotas(''); setDataSel(null); setHoraSel('');
     setNovoNome(''); setNovoTel(''); setNovoModelo(''); setSucesso(null);
     setVista('dashboard');
   }
 
-  const btn = (bg: string) => ({ width: '100%', padding: '12px 0', background: bg, color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 10 });
+  const btn = (bg: string, extra?: any) => ({ width: '100%', padding: '12px 0', background: bg, color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer', marginTop: 10, ...extra });
   const card = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 12 };
   const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 8, boxSizing: 'border-box' as const, fontSize: 14 };
 
@@ -185,6 +249,8 @@ export default function Home() {
     );
   }
 
+  const diasSemana = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+
   return (
     <div style={{ fontFamily: 'sans-serif', maxWidth: 480, margin: '0 auto', padding: '0 0 80px' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '16px 16px 8px', borderBottom: '1px solid #e5e7eb', marginBottom: 16 }}>
@@ -195,6 +261,7 @@ export default function Home() {
         <button onClick={fazerLogout} style={{ border: '1px solid #e5e7eb', background: 'transparent', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', color: '#888' }}>Sair</button>
       </div>
 
+      {/* DASHBOARD */}
       {vista === 'dashboard' && (
         <div style={{ padding: '0 16px' }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Dashboard · Hoje</div>
@@ -237,6 +304,7 @@ export default function Home() {
         </div>
       )}
 
+      {/* AGENDA */}
       {vista === 'agenda' && (
         <div style={{ padding: '0 16px', textAlign: 'center' }}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>📅 Agenda EcoCarWash</div>
@@ -244,7 +312,7 @@ export default function Home() {
             <div style={{ fontSize: 48, marginBottom: 12 }}>📅</div>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Agenda Interna</div>
             <div style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>Clica para abrir em nova janela</div>
-            <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
+            <a href={`${AGENDA_BASE}/#/dashboard`} target="_blank" rel="noopener noreferrer"
               style={{ display: 'block', width: '100%', padding: '14px 0', background: '#C4922A', color: '#fff', borderRadius: 12, fontSize: 15, fontWeight: 600, textDecoration: 'none', boxSizing: 'border-box' as const }}>
               🗓️ Abrir Agenda
             </a>
@@ -252,10 +320,12 @@ export default function Home() {
         </div>
       )}
 
+      {/* NOVA ENTRADA */}
       {vista === 'entrada' && (
         <div style={{ padding: '0 16px' }}>
           <button onClick={() => setVista('dashboard')} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>← Dashboard</button>
 
+          {/* PESQUISA */}
           {ecrã === 'pesquisa' && (
             <div>
               <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>Matrícula</div>
@@ -265,6 +335,7 @@ export default function Home() {
             </div>
           )}
 
+          {/* NOVO CLIENTE */}
           {ecrã === 'novo' && (
             <div style={{ ...card, background: '#fffbeb', borderColor: '#fcd34d' }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Matrícula não encontrada</div>
@@ -277,6 +348,7 @@ export default function Home() {
             </div>
           )}
 
+          {/* FICHA CLIENTE */}
           {ecrã === 'cliente' && veiculo && (() => {
             const cupao = calcularCupao(ordens);
             return (
@@ -303,14 +375,10 @@ export default function Home() {
                   <div style={{ background: '#fefce8', border: '1.5px dashed #facc15', borderRadius: 10, padding: 12, marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span style={{ fontSize: 20 }}>🎟️</span>
-                      <span style={{ fontWeight: 700, color: '#854d0e', fontSize: 14 }}>Cupão de Fidelização Activo!</span>
+                      <span style={{ fontWeight: 700, color: '#854d0e', fontSize: 14 }}>Cupão Activo!</span>
                     </div>
-                    <div style={{ fontSize: 13, color: '#713f12', marginBottom: 4 }}>
-                      Desconto de <strong style={{ fontSize: 16, color: '#16a34a' }}>{cupao.desconto}€</strong> na próxima lavagem
-                    </div>
-                    <div style={{ fontSize: 11, color: '#92400e' }}>
-                      ⏰ Válido até <strong>{cupao.dataExpira}</strong> · {cupao.diasRestantes} dias restantes
-                    </div>
+                    <div style={{ fontSize: 13, color: '#713f12', marginBottom: 4 }}>Desconto de <strong style={{ color: '#16a34a' }}>{cupao.desconto}€</strong></div>
+                    <div style={{ fontSize: 11, color: '#92400e' }}>⏰ Válido até {cupao.dataExpira} · {cupao.diasRestantes} dias</div>
                   </div>
                 )}
                 {ordens.length > 0 && (
@@ -324,34 +392,84 @@ export default function Home() {
                     ))}
                   </div>
                 )}
-                <button onClick={() => setEcrã('agenda_check')} style={btn('#2563eb')}>📅 Ver Disponibilidade na Agenda →</button>
+                <button onClick={() => { abrirAgendaHoje(); setEcrã('calendario'); }} style={btn('#2563eb')}>📅 Ver Disponibilidade → Agendar</button>
                 <button onClick={() => setEcrã('pesquisa')} style={{ ...btn('#888'), marginTop: 6 }}>← Nova Pesquisa</button>
               </div>
             );
           })()}
 
-          {ecrã === 'agenda_check' && (
+          {/* CALENDÁRIO */}
+          {ecrã === 'calendario' && (
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>📅 Verificar disponibilidade</div>
-              <div style={{ ...card, padding: 20, textAlign: 'center', marginBottom: 12 }}>
-                <div style={{ fontSize: 36, marginBottom: 10 }}>📅</div>
-                <div style={{ fontSize: 13, color: '#666', marginBottom: 16, lineHeight: 1.5 }}>
-                  Abre a agenda para verificar disponibilidade.<br/>
-                  Depois volta aqui e continua.
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>📅 Escolhe o dia</div>
+              <div style={{ ...card, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <button onClick={() => setMesBase(new Date(mesBase.getFullYear(), mesBase.getMonth()-1, 1))}
+                    style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 16 }}>‹</button>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    {mesBase.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <button onClick={() => setMesBase(new Date(mesBase.getFullYear(), mesBase.getMonth()+1, 1))}
+                    style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontSize: 16 }}>›</button>
                 </div>
-                <a href={AGENDA_URL} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'block', width: '100%', padding: '12px 0', background: '#2563eb', color: '#fff', borderRadius: 12, fontSize: 14, fontWeight: 600, textDecoration: 'none', boxSizing: 'border-box' as const, marginBottom: 0 }}>
-                  🗓️ Abrir Agenda numa nova janela
-                </a>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+                  {diasSemana.map(d => (
+                    <div key={d} style={{ textAlign: 'center', fontSize: 10, color: '#888', fontWeight: 600, padding: '4px 0' }}>{d}</div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+                  {gerarCalendario(mesBase).map((item, i) => (
+                    <div key={i}
+                      onClick={() => { if (item && !item.passado) setDataSel(item.data); }}
+                      style={{
+                        textAlign: 'center', padding: '6px 2px', borderRadius: 6, fontSize: 13, cursor: item && !item.passado ? 'pointer' : 'default',
+                        background: item && dataSel && item.data.toDateString() === dataSel.toDateString() ? '#C4922A' : item?.hoje ? '#fffbeb' : 'transparent',
+                        color: item && dataSel && item.data.toDateString() === dataSel.toDateString() ? '#fff' : item?.passado ? '#d1d5db' : item?.hoje ? '#C4922A' : '#374151',
+                        fontWeight: item?.hoje || (item && dataSel && item.data.toDateString() === dataSel.toDateString()) ? 700 : 400,
+                        border: item?.hoje && !(dataSel && item.data.toDateString() === dataSel.toDateString()) ? '1px solid #C4922A' : '1px solid transparent'
+                      }}>
+                      {item ? item.dia : ''}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <button onClick={() => setEcrã('servico')} style={btn('#C4922A')}>✅ Horário confirmado → Escolher Serviço</button>
+              {dataSel && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: 10, marginBottom: 10, fontSize: 13, textAlign: 'center' }}>
+                  ✅ <strong>{dataSel.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>
+                </div>
+              )}
+              <button onClick={() => dataSel && setEcrã('hora')} style={btn(dataSel ? '#C4922A' : '#ccc')}>Escolher Hora →</button>
               <button onClick={() => setEcrã('cliente')} style={{ ...btn('#888'), marginTop: 6 }}>← Voltar</button>
             </div>
           )}
 
+          {/* HORA */}
+          {ecrã === 'hora' && (
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>🕐 Escolhe a hora</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+                {dataSel?.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+                {HORAS_DISPONIVEIS.map(h => (
+                  <div key={h} onClick={() => setHoraSel(h)}
+                    style={{ textAlign: 'center', padding: '10px 4px', borderRadius: 8, border: `1.5px solid ${horaSel === h ? '#C4922A' : '#e5e7eb'}`, background: horaSel === h ? '#fffbeb' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: horaSel === h ? 700 : 400, color: horaSel === h ? '#C4922A' : '#374151' }}>
+                    {h}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => horaSel && setEcrã('servico')} style={btn(horaSel ? '#C4922A' : '#ccc')}>Escolher Serviço →</button>
+              <button onClick={() => setEcrã('calendario')} style={{ ...btn('#888'), marginTop: 6 }}>← Voltar</button>
+            </div>
+          )}
+
+          {/* SERVIÇO */}
           {ecrã === 'servico' && (
             <div>
-              <div style={{ fontWeight: 700, marginBottom: 16 }}>Escolhe o serviço:</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Escolhe o serviço:</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+                {dataSel?.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' })} às {horaSel}
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                 {servicos.map(s => (
                   <div key={s.id} onClick={() => setServicoSel(s)}
@@ -362,85 +480,133 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              {servicoSel && (
-                <div style={{ background: '#fffbeb', border: '1px solid #C4922A', borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 13 }}>
-                  <strong>{servicoSel.nome} {servicoSel.preco}€</strong> → Comissão: <strong style={{ color: '#C4922A' }}>{(servicoSel.pontos * VALOR_PONTO).toFixed(2)}€</strong>
-                </div>
-              )}
-              <button onClick={() => servicoSel && setEcrã('lavadores')} style={btn(servicoSel ? '#C4922A' : '#ccc')}>Escolher Lavadores →</button>
-              <button onClick={() => setEcrã('agenda_check')} style={{ ...btn('#888'), marginTop: 6 }}>← Voltar</button>
+              <button onClick={() => servicoSel && setEcrã('detalhes')} style={btn(servicoSel ? '#C4922A' : '#ccc')}>Continuar →</button>
+              <button onClick={() => setEcrã('hora')} style={{ ...btn('#888'), marginTop: 6 }}>← Voltar</button>
             </div>
           )}
 
-          {ecrã === 'lavadores' && (
+          {/* DETALHES — vendedor, lavadores, estado, notas */}
+          {ecrã === 'detalhes' && (
             <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Selecciona os lavadores:</div>
-              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>Toca para seleccionar — pode deixar vazio se ainda não sabe</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>Detalhes do agendamento</div>
+
+              {/* VENDEDOR */}
+              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Vendedor *</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
                 {funcionarios.map(f => (
-                  <div key={f.id_interno} onClick={() => toggleLavador(f.id_interno)}
-                    style={{ padding: '8px 16px', borderRadius: 20, border: `1.5px solid ${lavadoresSel.includes(f.id_interno) ? '#C4922A' : '#e5e7eb'}`, background: lavadoresSel.includes(f.id_interno) ? '#fffbeb' : '#fff', cursor: 'pointer', fontSize: 14, fontWeight: lavadoresSel.includes(f.id_interno) ? 700 : 400, color: lavadoresSel.includes(f.id_interno) ? '#C4922A' : '#444' }}>
+                  <div key={f.id_interno} onClick={() => setVendedorSel(vendedorSel === f.id_interno ? null : f.id_interno)}
+                    style={{ padding: '8px 14px', borderRadius: 20, border: `1.5px solid ${vendedorSel === f.id_interno ? '#2563eb' : '#e5e7eb'}`, background: vendedorSel === f.id_interno ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: vendedorSel === f.id_interno ? 700 : 400, color: vendedorSel === f.id_interno ? '#2563eb' : '#444' }}>
                     {f.id_interno}. {f.nome}
                   </div>
                 ))}
               </div>
-              <div onClick={() => { setSemLavador(!semLavador); setLavadoresSel([]); }}
-                style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${semLavador ? '#2563eb' : '#e5e7eb'}`, background: semLavador ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 16 }}>⏳</span>
-                <span style={{ fontWeight: semLavador ? 700 : 400, color: semLavador ? '#2563eb' : '#666' }}>A definir depois (agendamento futuro)</span>
-              </div>
-              {lavadoresSel.length > 0 && servicoSel && (
-                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, marginBottom: 6 }}>💰 Divisão:</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                    <div style={{ textAlign: 'center' }}><div style={{ fontSize: 11, color: '#888' }}>Total</div><div style={{ fontWeight: 700, color: '#C4922A' }}>{(servicoSel.pontos * VALOR_PONTO).toFixed(2)}€</div></div>
-                    <div style={{ textAlign: 'center' }}><div style={{ fontSize: 11, color: '#888' }}>Lavadores</div><div style={{ fontWeight: 700 }}>{lavadoresSel.length}x</div></div>
-                    <div style={{ textAlign: 'center' }}><div style={{ fontSize: 11, color: '#888' }}>Cada um</div><div style={{ fontWeight: 700, color: '#16a34a' }}>{(servicoSel.pontos * VALOR_PONTO / lavadoresSel.length).toFixed(2)}€</div></div>
+
+              {/* LAVADORES */}
+              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Lavadores (pode deixar vazio)</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {funcionarios.map(f => (
+                  <div key={f.id_interno} onClick={() => {
+                    setLavadoresSel(prev => prev.includes(f.id_interno) ? prev.filter(x => x !== f.id_interno) : [...prev, f.id_interno]);
+                  }}
+                    style={{ padding: '8px 14px', borderRadius: 20, border: `1.5px solid ${lavadoresSel.includes(f.id_interno) ? '#C4922A' : '#e5e7eb'}`, background: lavadoresSel.includes(f.id_interno) ? '#fffbeb' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: lavadoresSel.includes(f.id_interno) ? 700 : 400, color: lavadoresSel.includes(f.id_interno) ? '#C4922A' : '#444' }}>
+                    {f.id_interno}. {f.nome}
                   </div>
+                ))}
+                <div onClick={() => setLavadoresSel([])}
+                  style={{ padding: '8px 14px', borderRadius: 20, border: `1.5px solid ${lavadoresSel.length === 0 ? '#2563eb' : '#e5e7eb'}`, background: lavadoresSel.length === 0 ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 13, color: lavadoresSel.length === 0 ? '#2563eb' : '#888' }}>
+                  ⏳ A definir
+                </div>
+              </div>
+
+              {/* ESTADO */}
+              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Estado</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {ESTADOS.map(e => (
+                  <div key={e} onClick={() => setEstado(e)}
+                    style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${estado === e ? ESTADO_CORES[e] : '#e5e7eb'}`, background: estado === e ? ESTADO_CORES[e] : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: estado === e ? 700 : 400, color: estado === e ? '#fff' : '#444' }}>
+                    {e}
+                  </div>
+                ))}
+              </div>
+
+              {/* NOTAS */}
+              <div style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Notas adicionais</div>
+              <textarea value={notas} onChange={e => setNotas(e.target.value)} placeholder="Pedidos especiais, observações..." rows={3}
+                style={{ ...inp, resize: 'none', fontFamily: 'sans-serif' }} />
+
+              {/* RESUMO */}
+              {servicoSel && (
+                <div style={{ background: '#fffbeb', border: '1px solid #C4922A', borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 13 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>📋 Resumo</div>
+                  <div style={{ color: '#666' }}>{dataSel?.toLocaleDateString('pt-PT')} às {horaSel}</div>
+                  <div style={{ color: '#666' }}>{servicoSel.nome} · {servicoSel.preco}€</div>
+                  {lavadoresSel.length > 0 && (
+                    <div style={{ color: '#C4922A', fontWeight: 600 }}>
+                      Comissão: {(servicoSel.pontos * VALOR_PONTO).toFixed(2)}€ ÷ {lavadoresSel.length} = {(servicoSel.pontos * VALOR_PONTO / lavadoresSel.length).toFixed(2)}€/pessoa
+                    </div>
+                  )}
                 </div>
               )}
-              <button onClick={confirmarLavagem} disabled={lavadoresSel.length === 0 && !semLavador}
-                style={btn(lavadoresSel.length > 0 || semLavador ? '#16a34a' : '#ccc')}>
-                ✅ Confirmar {semLavador ? 'Agendamento' : 'Lavagem'}
-              </button>
+
+              <button onClick={confirmarLavagem} style={btn('#16a34a')}>✅ Confirmar → Registar na Agenda</button>
               <button onClick={() => setEcrã('servico')} style={{ ...btn('#888'), marginTop: 6 }}>← Voltar</button>
             </div>
           )}
 
+          {/* CONFIRMAÇÃO */}
           {ecrã === 'confirmacao' && sucesso && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 8 }}>{sucesso.semLavador ? '📅' : '✅'}</div>
-              <h2 style={{ fontWeight: 700, marginBottom: 4 }}>{sucesso.semLavador ? 'Agendamento Registado!' : 'Lavagem Registada!'}</h2>
-              <p style={{ color: '#888', fontSize: 13, marginBottom: 20 }}>{veiculo?.nome_cliente} · {veiculo?.matricula}</p>
-              <div style={{ ...card, textAlign: 'left' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Serviço</span><span style={{ fontWeight: 600 }}>{sucesso.servico}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Valor</span><span style={{ fontWeight: 600 }}>{sucesso.valor}€</span></div>
-                {!sucesso.semLavador && (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Pontos</span><span style={{ fontWeight: 600, color: '#C4922A' }}>{sucesso.pontos} pts</span></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #e5e7eb', fontSize: 13 }}><span style={{ color: '#888' }}>Comissão total</span><span style={{ fontWeight: 600, color: '#C4922A' }}>{sucesso.comissaoTotal.toFixed(2)}€</span></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0 0', fontSize: 15 }}><span style={{ fontWeight: 600 }}>Por lavador ({sucesso.nLavadores}x)</span><span style={{ fontWeight: 700, color: '#16a34a', fontSize: 18 }}>{sucesso.comissaoIndividual.toFixed(2)}€</span></div>
-                  </>
-                )}
-                {sucesso.semLavador && (
-                  <div style={{ padding: '10px 0 0', fontSize: 13, color: '#2563eb' }}>⏳ Lavador a definir posteriormente</div>
-                )}
-              </div>
-              {!sucesso.semLavador && sucesso.lavadores.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 16 }}>
-                  {sucesso.lavadores.map((f: any) => (
-                    <div key={f.id_interno} style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 20, padding: '4px 14px', fontSize: 13, fontWeight: 600, color: '#16a34a' }}>
-                      {f.nome} +{sucesso.comissaoIndividual.toFixed(2)}€
-                    </div>
-                  ))}
+            <div>
+              {/* HEADER ESTILO AGENDA */}
+              <div style={{ background: ESTADO_CORES[sucesso.estado] || '#16a34a', borderRadius: 12, padding: 16, marginBottom: 12, color: '#fff', textAlign: 'center' }}>
+                <div style={{ fontSize: 32, marginBottom: 4 }}>✅</div>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>Agendamento Registado!</div>
+                <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>
+                  {sucesso.dataSel?.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })} às {sucesso.horaSel}
                 </div>
-              )}
+                <div style={{ marginTop: 8, background: 'rgba(255,255,255,0.2)', borderRadius: 20, padding: '3px 12px', display: 'inline-block', fontSize: 12, fontWeight: 600 }}>
+                  {sucesso.estado}
+                </div>
+              </div>
+
+              {/* DADOS ESTILO AGENDA */}
+              <div style={{ ...card, padding: 14 }}>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f3f4f6' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#C4922A', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, flexShrink: 0 }}>{veiculo?.nome_cliente?.charAt(0) || '?'}</div>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{veiculo?.nome_cliente}</div>
+                    <div style={{ fontSize: 12, color: '#888' }}>{veiculo?.telefone_cliente} · {veiculo?.matricula}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: '#888' }}>Serviço</span><span style={{ fontWeight: 600 }}>{sucesso.servico}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: '#888' }}>Valor</span><span style={{ fontWeight: 600 }}>{sucesso.valor}€</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: '#888' }}>Viatura</span><span style={{ fontWeight: 600 }}>{veiculo?.marca_modelo || '—'}</span></div>
+                  {sucesso.vendedor && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: '#888' }}>Vendedor</span><span style={{ fontWeight: 600, color: '#2563eb' }}>{sucesso.vendedor.nome}</span></div>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ color: '#888' }}>Lavadores</span>
+                    <span style={{ fontWeight: 600 }}>{sucesso.lavadores.length > 0 ? sucesso.lavadores.map((f:any) => f.nome).join(', ') : '⏳ A definir'}</span>
+                  </div>
+                  {sucesso.lavadores.length > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                      <span style={{ color: '#888' }}>Comissão/pessoa</span>
+                      <span style={{ fontWeight: 600, color: '#16a34a' }}>{sucesso.comissaoIndividual.toFixed(2)}€</span>
+                    </div>
+                  )}
+                  {sucesso.notas && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span style={{ color: '#888' }}>Notas</span><span style={{ fontWeight: 600, maxWidth: '60%', textAlign: 'right' }}>{sucesso.notas}</span></div>}
+                </div>
+              </div>
+
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: 10, marginBottom: 12, fontSize: 12, color: '#1d4ed8', textAlign: 'center' }}>
+                📅 A agenda foi aberta automaticamente com os dados preenchidos
+              </div>
+
               <button onClick={resetar} style={btn('#C4922A')}>➕ Nova Entrada</button>
             </div>
           )}
         </div>
       )}
 
+      {/* BARRA INFERIOR */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', padding: '8px 0' }}>
         <button onClick={() => setVista('dashboard')} style={{ flex: 1, border: 'none', background: 'none', cursor: 'pointer', padding: '6px 0', fontSize: 11, color: vista === 'dashboard' ? '#C4922A' : '#888', fontWeight: vista === 'dashboard' ? 700 : 400 }}>
           📊<br/>Dashboard
