@@ -53,6 +53,28 @@ function gerarCalendario(base: Date) {
   return dias;
 }
 
+function BotaoCopiar({ label, texto }: { label: string, texto: string }) {
+  const [copiado, setCopiado] = useState(false);
+  function copiar() {
+    navigator.clipboard.writeText(texto).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    });
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 6 }}>
+      <div>
+        <div style={{ fontSize: 10, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginTop: 2 }}>{texto}</div>
+      </div>
+      <button onClick={copiar}
+        style={{ border: 'none', background: copiado ? '#16a34a' : '#2563eb', color: '#fff', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>
+        {copiado ? '✅' : '📋'}
+      </button>
+    </div>
+  );
+}
+
 export default function Home() {
   const [sessao, setSessao] = useState<any>(null);
   const [vista, setVista] = useState<'dashboard'|'entrada'|'agenda'>('dashboard');
@@ -79,7 +101,6 @@ export default function Home() {
   const [novoTel, setNovoTel] = useState('');
   const [novoModelo, setNovoModelo] = useState('');
   const [sucesso, setSucesso] = useState<any>(null);
-  const [copiado, setCopiado] = useState(false);
   const [dashboard, setDashboard] = useState<any>(null);
   const [ranking, setRanking] = useState<any[]>([]);
 
@@ -164,39 +185,11 @@ export default function Home() {
     }
     const vendedor = funcionarios.find(f=>f.id_interno===vendedorSel);
     const lavadores = funcionarios.filter(f=>lavadoresSel.includes(f.id_interno));
-    setSucesso({servico:servicoSel.nome,valor:servicoSel.preco,pontos:servicoSel.pontos,
-      comissaoTotal:ct,comissaoIndividual:ci,nLavadores:lavadoresSel.length,
-      lavadores,vendedor,estado,notas,dataSel,horaSel});
+    setSucesso({servico:servicoSel.nome, valor:servicoSel.preco, pontos:servicoSel.pontos,
+      comissaoTotal:ct, comissaoIndividual:ci, nLavadores:lavadoresSel.length,
+      lavadores, vendedor, estado, notas, dataSel, horaSel});
     setEcrã('confirmacao');
     carregarDashboard();
-  }
-
-  function gerarTextoAgenda() {
-    if (!sucesso) return '';
-    const lavNomes = sucesso.lavadores.length>0 ? sucesso.lavadores.map((f:any)=>f.nome).join(', ') : 'A definir';
-    return `📋 AGENDAMENTO AUTOWASH PRO
-━━━━━━━━━━━━━━━━━━━━
-👤 Cliente: ${veiculo?.nome_cliente}
-📞 Telefone: ${veiculo?.telefone_cliente || '—'}
-🚗 Matrícula: ${veiculo?.matricula}
-🚙 Viatura: ${veiculo?.marca_modelo || '—'}
-━━━━━━━━━━━━━━━━━━━━
-📅 Data: ${sucesso.dataSel?.toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
-🕐 Hora: ${sucesso.horaSel}
-🧼 Serviço: ${sucesso.servico}
-💶 Valor: ${sucesso.valor}€
-📊 Estado: ${sucesso.estado}
-━━━━━━━━━━━━━━━━━━━━
-🏪 Vendedor: ${sucesso.vendedor?.nome || 'Não definido'}
-👨‍🔧 Lavadores: ${lavNomes}
-${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
-  }
-
-  function copiarTexto() {
-    navigator.clipboard.writeText(gerarTextoAgenda()).then(()=>{
-      setCopiado(true);
-      setTimeout(()=>setCopiado(false),3000);
-    });
   }
 
   function resetar() {
@@ -204,7 +197,7 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
     setServicoSel(null); setLavadoresSel([]); setVendedorSel(null);
     setEstado('Agendado'); setNotas(''); setDataSel(null); setHoraSel('');
     setNovoNome(''); setNovoTel(''); setNovoModelo(''); setSucesso(null);
-    setCopiado(false); setVista('dashboard');
+    setVista('dashboard');
   }
 
   const btn = (bg:string) => ({width:'100%',padding:'12px 0',background:bg,color:'#fff',border:'none',borderRadius:12,fontSize:15,fontWeight:600,cursor:'pointer',marginTop:10});
@@ -240,7 +233,6 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
         <button onClick={fazerLogout} style={{border:'1px solid #e5e7eb',background:'transparent',borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',color:'#888'}}>Sair</button>
       </div>
 
-      {/* DASHBOARD */}
       {vista==='dashboard'&&(
         <div style={{padding:'0 16px'}}>
           <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>Dashboard · Hoje</div>
@@ -278,7 +270,6 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
         </div>
       )}
 
-      {/* AGENDA */}
       {vista==='agenda'&&(
         <div style={{padding:'0 16px',textAlign:'center'}}>
           <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>📅 Agenda EcoCarWash</div>
@@ -294,7 +285,6 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
         </div>
       )}
 
-      {/* NOVA ENTRADA */}
       {vista==='entrada'&&(
         <div style={{padding:'0 16px'}}>
           <button onClick={()=>setVista('dashboard')} style={{background:'none',border:'none',color:'#888',cursor:'pointer',fontSize:13,marginBottom:12}}>← Dashboard</button>
@@ -500,7 +490,6 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
 
           {ecrã==='confirmacao'&&sucesso&&(
             <div>
-              {/* HEADER */}
               <div style={{background:ESTADO_COR[sucesso.estado]||'#16a34a',borderRadius:12,padding:16,marginBottom:12,color:'#fff',textAlign:'center'}}>
                 <div style={{fontSize:32,marginBottom:4}}>✅</div>
                 <div style={{fontWeight:700,fontSize:16}}>Agendamento Registado!</div>
@@ -512,8 +501,7 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
                 </div>
               </div>
 
-              {/* DADOS */}
-              <div style={{...card,padding:14}}>
+              <div style={{...card,padding:14,marginBottom:8}}>
                 <div style={{display:'flex',gap:10,marginBottom:10,paddingBottom:10,borderBottom:'1px solid #f3f4f6'}}>
                   <div style={{width:40,height:40,borderRadius:'50%',background:'#C4922A',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,flexShrink:0}}>{veiculo?.nome_cliente?.charAt(0)||'?'}</div>
                   <div>
@@ -537,22 +525,28 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
                 ))}
               </div>
 
-              {/* CAIXA DE TRANSFERÊNCIA PARA AGENDA */}
-              <div style={{...card,background:'#f8faff',borderColor:'#bfdbfe',padding:14}}>
-                <div style={{fontWeight:700,fontSize:13,color:'#1d4ed8',marginBottom:8}}>📋 Copiar para a Agenda</div>
-                <div style={{fontSize:11,color:'#666',marginBottom:10,lineHeight:1.5}}>
-                  Copia o texto abaixo e cola nas notas da agenda da franquia
+              {/* BOTÕES INDIVIDUAIS PARA COPIAR */}
+              <div style={{...card,background:'#f8faff',borderColor:'#bfdbfe',padding:14,marginBottom:8}}>
+                <div style={{fontWeight:700,fontSize:13,color:'#1d4ed8',marginBottom:4}}>
+                  📋 Copiar para a Agenda da Franquia
                 </div>
-                <pre style={{background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,padding:10,fontSize:11,lineHeight:1.6,overflowX:'auto',whiteSpace:'pre-wrap',color:'#374151',marginBottom:10}}>
-                  {gerarTextoAgenda()}
-                </pre>
-                <button onClick={copiarTexto}
-                  style={{...btn(copiado?'#16a34a':'#2563eb'),marginTop:0}}>
-                  {copiado?'✅ Copiado!':'📋 Copiar Texto'}
-                </button>
+                <div style={{fontSize:11,color:'#666',marginBottom:12}}>
+                  1. Abre a agenda · 2. Copia cada campo · 3. Cola no campo correspondente
+                </div>
+
+                <BotaoCopiar label="Nome do Cliente" texto={veiculo?.nome_cliente||''} />
+                <BotaoCopiar label="Telefone" texto={veiculo?.telefone_cliente||''} />
+                <BotaoCopiar label="Matrícula / Viatura" texto={`${veiculo?.matricula} - ${veiculo?.marca_modelo||''}`} />
+                <BotaoCopiar label="Data" texto={sucesso.dataSel?.toLocaleDateString('pt-PT')||''} />
+                <BotaoCopiar label="Hora" texto={sucesso.horaSel} />
+                <BotaoCopiar label="Serviço" texto={sucesso.servico} />
+                <BotaoCopiar label="Vendedor" texto={sucesso.vendedor?.nome||'Não definido'} />
+                <BotaoCopiar label="Lavadores" texto={sucesso.lavadores.length>0?sucesso.lavadores.map((f:any)=>f.nome).join(', '):'A definir'} />
+                {sucesso.notas&&<BotaoCopiar label="Notas" texto={sucesso.notas} />}
+
                 <a href={AGENDA_NOVA} target="_blank" rel="noopener noreferrer"
-                  style={{display:'block',width:'100%',padding:'12px 0',background:'#C4922A',color:'#fff',borderRadius:12,fontSize:15,fontWeight:600,textDecoration:'none',boxSizing:'border-box' as const,textAlign:'center',marginTop:8}}>
-                  🗓️ Abrir Agenda para Colar
+                  style={{display:'block',width:'100%',padding:'12px 0',background:'#C4922A',color:'#fff',borderRadius:12,fontSize:14,fontWeight:600,textDecoration:'none',boxSizing:'border-box' as const,textAlign:'center',marginTop:10}}>
+                  🗓️ Abrir Agenda Nova Marcação
                 </a>
               </div>
 
@@ -562,7 +556,6 @@ ${sucesso.notas ? `📝 Notas: ${sucesso.notas}` : ''}`.trim();
         </div>
       )}
 
-      {/* BARRA INFERIOR */}
       <div style={{position:'fixed',bottom:0,left:0,right:0,background:'#fff',borderTop:'1px solid #e5e7eb',display:'flex',padding:'8px 0'}}>
         <button onClick={()=>setVista('dashboard')} style={{flex:1,border:'none',background:'none',cursor:'pointer',padding:'6px 0',fontSize:11,color:vista==='dashboard'?'#C4922A':'#888',fontWeight:vista==='dashboard'?700:400}}>
           📊<br/>Dashboard
